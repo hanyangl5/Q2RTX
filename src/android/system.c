@@ -138,30 +138,6 @@ void Sys_Quit(void)
 
 void Sys_AddDefaultConfig(void)
 {
-    static const char *android_defaults =
-        "set vid_fullscreen 1\n"
-        "set vid_rtx 1\n"
-        "set cl_maxfps 30\n"
-        "set r_maxfps 30\n"
-        "set drs_enable 1\n"
-        "set drs_target 30\n"
-        "set drs_minscale 25\n"
-        "set drs_maxscale 50\n"
-        "set flt_fsr_enable 1\n"
-        "set flt_fsr_easu 1\n"
-        "set flt_fsr_rcas 1\n"
-        "set flt_fsr_sharpness 0.15\n"
-        "set gr_enable 0\n"
-        "set pt_caustics 0\n"
-        "set bloom_enable 0\n"
-        "set pt_num_bounce_rays 0.5\n"
-        "set pt_texture_lod_bias 2\n"
-        "set scr_scale 1\n"
-        "set cl_cinematics 0\n"
-        "set sv_cinematics 0\n"
-        "set android_touch_controls 1\n";
-
-    Cbuf_AddText(&cmd_buffer, android_defaults);
 }
 
 void Sys_Sleep(int msec)
