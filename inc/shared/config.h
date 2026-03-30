@@ -16,7 +16,11 @@
 #define BUILDSTRING "Win32"
 #elif __aarch64__
 #define CPUSTRING "aarch64"
+#ifdef __ANDROID__
+#define BUILDSTRING "Android"
+#else
 #define BUILDSTRING "Linux"
+#endif
 #elif __x86_64__
 #define CPUSTRING "x86_64"
 #define BUILDSTRING "Linux"
@@ -36,7 +40,11 @@
 
 #define USE_ICMP 1
 #define USE_ZLIB 1
+#ifdef __ANDROID__
+#define USE_SYSCON 0
+#else
 #define USE_SYSCON 1
+#endif
 #define USE_DBGHELP 1
 
 #if USE_CLIENT

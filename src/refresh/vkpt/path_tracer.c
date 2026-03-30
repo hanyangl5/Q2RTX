@@ -244,17 +244,24 @@ vkpt_pt_init()
 	_VK(vkCreatePipelineLayout(qvk.device, &pipeline_layout_create_info, NULL, &rt_pipeline_layout));
 	ATTACH_LABEL_VARIABLE(rt_pipeline_layout, PIPELINE_LAYOUT);
 
+	const uint32_t rt_descriptor_set_count = MAX_FRAMES_IN_FLIGHT;
+	const uint32_t uniform_texel_buffer_descriptors_per_set = LENGTH(bindings) - 1;
+	const uint32_t acceleration_structure_descriptors_per_set = TLAS_COUNT;
+
 	VkDescriptorPoolSize pool_sizes[] = {
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, MAX_FRAMES_IN_FLIGHT * LENGTH(bindings) },
-		{ VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, MAX_FRAMES_IN_FLIGHT }
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, rt_descriptor_set_count * uniform_texel_buffer_descriptors_per_set + MAX_FRAMES_IN_FLIGHT },
+		{ VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, rt_descriptor_set_count * acceleration_structure_descriptors_per_set }
 	};
 
 	VkDescriptorPoolCreateInfo pool_create_info = {
 		.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets       = MAX_FRAMES_IN_FLIGHT,
+		.maxSets       = rt_descriptor_set_count + MAX_FRAMES_IN_FLIGHT,
 		.poolSizeCount = LENGTH(pool_sizes),
 		.pPoolSizes    = pool_sizes
 	};
+
+	Com_Printf("RT descriptor pool: %u uniform texel buffers, %u acceleration structures, %u sets\n",
+		pool_sizes[0].descriptorCount, pool_sizes[1].descriptorCount, pool_create_info.maxSets);
 
 	_VK(vkCreateDescriptorPool(qvk.device, &pool_create_info, NULL, &rt_descriptor_pool));
 	ATTACH_LABEL_VARIABLE(rt_descriptor_pool, DESCRIPTOR_POOL);

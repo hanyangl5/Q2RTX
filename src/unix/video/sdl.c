@@ -26,7 +26,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "common/common.h"
 #include "common/files.h"
 #include "common/zone.h"
-#include "client/client.h"
+#include "../../client/client.h"
 #include "client/input.h"
 #include "client/keys.h"
 #include "client/ui.h"
@@ -34,6 +34,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "refresh/refresh.h"
 #include "system/system.h"
 #include "../res/q2pro.xbm"
+#ifdef __ANDROID__
+#include "../../android/android_input.h"
+#endif
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
 
@@ -142,6 +145,23 @@ static void mode_changed(void)
     else
         SDL_GL_GetDrawableSize(sdl.window, &sdl.width, &sdl.height);
 
+#ifdef __ANDROID__
+    if (sdl.win_height > sdl.win_width) {
+        int tmp = sdl.win_width;
+        sdl.win_width = sdl.win_height;
+        sdl.win_height = tmp;
+    }
+    if (sdl.height > sdl.width) {
+        int raw_width = sdl.width;
+        int raw_height = sdl.height;
+        int tmp = sdl.width;
+        sdl.width = sdl.height;
+        sdl.height = tmp;
+        Com_Printf("Android drawable size normalized from %dx%d to %dx%d\n",
+                   raw_width, raw_height, sdl.width, sdl.height);
+    }
+#endif
+
     if (flags & SDL_WINDOW_FULLSCREEN)
         sdl.flags |= QVF_FULLSCREEN;
     else
@@ -156,6 +176,12 @@ static void set_mode(void)
     Uint32 flags;
     vrect_t rc;
     int freq;
+
+#ifdef __ANDROID__
+    SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+    mode_changed();
+    return;
+#endif
 
     if (vid_fullscreen->integer) {
         // move the window onto the selected display
@@ -191,8 +217,13 @@ static void set_mode(void)
 static void fatal_shutdown(void)
 {
     SDL_SetWindowGrab(sdl.window, SDL_FALSE);
+#ifndef __ANDROID__
     SDL_SetRelativeMouseMode(SDL_FALSE);
     SDL_ShowCursor(SDL_ENABLE);
+#endif
+#ifdef __ANDROID__
+    Android_InputShutdown();
+#endif
     SDL_Quit();
 }
 
@@ -320,6 +351,9 @@ static int get_dpi_scale(void)
 
 static void sdl_shutdown(void)
 {
+#ifdef __ANDROID__
+    Android_InputShutdown();
+#endif
 #if REF_GL
     if (sdl.context)
         SDL_GL_DeleteContext(sdl.context);
@@ -334,10 +368,23 @@ static void sdl_shutdown(void)
 
 static bool init(graphics_api_t api)
 {
-	Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+	Uint32 flags = SDL_WINDOW_ALLOW_HIGHDPI;
 	vrect_t rc;
+    Uint32 init_flags = SDL_INIT_VIDEO;
 
-    if (SDL_InitSubSystem(SDL_INIT_VIDEO) == -1) {
+#ifdef __ANDROID__
+    init_flags |= SDL_INIT_GAMECONTROLLER;
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+    SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
+    SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+    SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "0");
+    flags |= SDL_WINDOW_FULLSCREEN;
+#else
+    flags |= SDL_WINDOW_RESIZABLE;
+#endif
+
+    if (SDL_InitSubSystem(init_flags) == -1) {
         Com_EPrintf("Couldn't initialize SDL video: %s\n", SDL_GetError());
         return false;
     }
@@ -371,6 +418,7 @@ static bool init(graphics_api_t api)
 
     SDL_SetWindowMinimumSize(sdl.window, 320, 240);
 
+#ifndef __ANDROID__
 	uint32_t icon_rgb[q2icon_height][q2icon_width];
 	for (int y = 0; y < q2icon_height; y++)
 	{
@@ -389,6 +437,7 @@ static bool init(graphics_api_t api)
         SDL_SetWindowIcon(sdl.window, icon);
         SDL_FreeSurface(icon);
     }
+#endif
 
 #if REF_GL
 	if (api == GAPI_OPENGL)
@@ -421,6 +470,10 @@ static bool init(graphics_api_t api)
     // activate disgusting wayland hacks
     sdl.wayland = !strcmp(SDL_GetCurrentVideoDriver(), "wayland");
 
+#ifdef __ANDROID__
+    Android_InputInit();
+#endif
+
     return true;
 
 fail:
@@ -440,7 +493,6 @@ static void window_event(SDL_WindowEvent *event)
 {
     Uint32 flags = SDL_GetWindowFlags(sdl.window);
     active_t active;
-    vrect_t rc;
 
     // wayland doesn't set SDL_WINDOW_*_FOCUS flags
     if (sdl.wayland) {
@@ -475,21 +527,25 @@ static void window_event(SDL_WindowEvent *event)
         break;
 
     case SDL_WINDOWEVENT_MOVED:
+#ifndef __ANDROID__
         if (!(flags & SDL_WINDOW_FULLSCREEN)) {
             SDL_GetWindowSize(sdl.window, &rc.width, &rc.height);
             rc.x = event->data1;
             rc.y = event->data2;
             VID_SetGeometry(&rc);
         }
+#endif
         break;
 
     case SDL_WINDOWEVENT_RESIZED:
+#ifndef __ANDROID__
         if (!(flags & SDL_WINDOW_FULLSCREEN)) {
             SDL_GetWindowPosition(sdl.window, &rc.x, &rc.y);
             rc.width = event->data1;
             rc.height = event->data2;
             VID_SetGeometry(&rc);
         }
+#endif
         mode_changed();
         break;
     }
@@ -569,9 +625,36 @@ static void mouse_wheel_event(SDL_MouseWheelEvent *event)
     }
 }
 
+#ifdef __ANDROID__
+static void text_input_event(SDL_TextInputEvent *event)
+{
+    char *text;
+
+    for (text = event->text; *text; text++) {
+        int key = (unsigned char)*text;
+
+        if (cls.key_dest & KEY_CONSOLE) {
+            Char_Console(key);
+        } else if (cls.key_dest & KEY_MENU) {
+            UI_CharEvent(key);
+        } else if (cls.key_dest & KEY_MESSAGE) {
+            Char_Message(key);
+        }
+    }
+}
+#endif
+
 static void pump_events(void)
 {
     SDL_Event    event;
+
+#ifdef __ANDROID__
+    if (Key_GetDest() & (KEY_CONSOLE | KEY_MESSAGE)) {
+        SDL_StartTextInput();
+    } else if (SDL_IsTextInputActive()) {
+        SDL_StopTextInput();
+    }
+#endif
 
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
@@ -585,6 +668,11 @@ static void pump_events(void)
         case SDL_KEYUP:
             key_event(&event.key);
             break;
+#ifdef __ANDROID__
+        case SDL_TEXTINPUT:
+            text_input_event(&event.text);
+            break;
+#endif
         case SDL_MOUSEMOTION:
             if (sdl.win_width && sdl.win_height)
                 UI_MouseEvent(event.motion.x * sdl.width / sdl.win_width,
@@ -597,6 +685,35 @@ static void pump_events(void)
         case SDL_MOUSEWHEEL:
             mouse_wheel_event(&event.wheel);
             break;
+#ifdef __ANDROID__
+        case SDL_FINGERDOWN:
+        case SDL_FINGERUP:
+        case SDL_FINGERMOTION:
+            Android_InputHandleTouch(&event.tfinger, sdl.width, sdl.height);
+            break;
+        case SDL_CONTROLLERAXISMOTION:
+            Android_InputHandleControllerAxis(&event.caxis);
+            break;
+        case SDL_CONTROLLERBUTTONDOWN:
+        case SDL_CONTROLLERBUTTONUP:
+            Android_InputHandleControllerButton(&event.cbutton);
+            break;
+        case SDL_CONTROLLERDEVICEADDED:
+            Android_InputHandleControllerAdded(event.cdevice.which);
+            break;
+        case SDL_CONTROLLERDEVICEREMOVED:
+            Android_InputHandleControllerRemoved(event.cdevice.which);
+            break;
+        case SDL_APP_WILLENTERBACKGROUND:
+        case SDL_APP_DIDENTERBACKGROUND:
+            Android_InputOnPause();
+            CL_Activate(ACT_MINIMIZED);
+            break;
+        case SDL_APP_WILLENTERFOREGROUND:
+        case SDL_APP_DIDENTERFOREGROUND:
+            CL_Activate(ACT_RESTORED);
+            break;
+#endif
         }
     }
 }
@@ -611,6 +728,11 @@ MOUSE
 
 static bool get_mouse_motion(int *dx, int *dy)
 {
+#ifdef __ANDROID__
+    if (Android_InputGetMotion(dx, dy)) {
+        return true;
+    }
+#endif
     if (!SDL_GetRelativeMouseMode()) {
         return false;
     }
@@ -620,15 +742,22 @@ static bool get_mouse_motion(int *dx, int *dy)
 
 static void warp_mouse(int x, int y)
 {
+#ifdef __ANDROID__
+    (void)x;
+    (void)y;
+#else
     SDL_WarpMouseInWindow(sdl.window, x, y);
     SDL_GetRelativeMouseState(NULL, NULL);
+#endif
 }
 
 static void shutdown_mouse(void)
 {
     SDL_SetWindowGrab(sdl.window, SDL_FALSE);
+#ifndef __ANDROID__
     SDL_SetRelativeMouseMode(SDL_FALSE);
     SDL_ShowCursor(SDL_ENABLE);
+#endif
 }
 
 static bool init_mouse(void)
@@ -643,10 +772,14 @@ static bool init_mouse(void)
 
 static void grab_mouse(bool grab)
 {
+#ifdef __ANDROID__
+    (void)grab;
+#else
     SDL_SetWindowGrab(sdl.window, grab);
     SDL_SetRelativeMouseMode(grab && !(Key_GetDest() & KEY_MENU));
     SDL_GetRelativeMouseState(NULL, NULL);
     SDL_ShowCursor(!(sdl.flags & QVF_FULLSCREEN));
+#endif
 }
 
 static bool probe(void)

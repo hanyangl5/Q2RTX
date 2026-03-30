@@ -1,0 +1,75 @@
+{
+  "version": 4,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "win64debug",
+      "displayName": "Win64 Debug",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install"
+      }
+    },
+    {
+      "name": "win64release",
+      "displayName": "Win64 Release",
+      "inherits": "win64debug",
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "androidappdebug",
+      "displayName": "Android App Debug",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "$env{ANDROID_NDK}/build/cmake/android.toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_SYSTEM_NAME": "Android",
+        "CMAKE_SYSTEM_VERSION": "34",
+        "CMAKE_ANDROID_ARCH_ABI": "arm64-v8a",
+        "CMAKE_ANDROID_STL_TYPE": "c++_static",
+        "CMAKE_MAKE_PROGRAM": "$env{ANDROID_NDK}/prebuilt/windows-x86_64/bin/make.exe",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install"
+      }
+    },
+    {
+      "name": "androidapprelease",
+      "displayName": "Android App Release",
+      "inherits": "androidappdebug",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "win64debug",
+      "configurePreset": "win64debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "win64release",
+      "configurePreset": "win64release",
+      "configuration": "Release"
+    },
+    {
+      "name": "androidappdebug",
+      "configurePreset": "androidappdebug"
+    },
+    {
+      "name": "androidapprelease",
+      "configurePreset": "androidapprelease"
+    }
+  ]
+}

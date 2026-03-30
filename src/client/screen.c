@@ -19,6 +19,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "client.h"
 #include "refresh/images.h"
+#ifdef __ANDROID__
+#include "../android/android_input.h"
+#endif
 
 #define STAT_PICS       11
 #define STAT_MINUS      (STAT_PICS - 1)  // num frame for '-' stats digit
@@ -2085,6 +2088,10 @@ static void SCR_Draw2D(void)
     SCR_DrawChatHUD();
 
     SCR_DrawTurtle();
+
+#ifdef __ANDROID__
+    Android_InputDrawControls(scr.hud_width, scr.hud_height);
+#endif
 
     SCR_DrawPause();
 

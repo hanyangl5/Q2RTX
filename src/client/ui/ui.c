@@ -450,11 +450,13 @@ void UI_Draw(unsigned realtime)
         }
     }
 
-    // draw custom cursor in fullscreen mode
+    // On Android menus are driven by touch, so suppress the desktop-style cursor.
+#ifndef __ANDROID__
     if (r_config.flags & QVF_FULLSCREEN) {
         R_DrawPic(uis.mouseCoords[0] - uis.cursorWidth / 2,
                   uis.mouseCoords[1] - uis.cursorHeight / 2, uis.cursorHandle);
     }
+#endif
 
     if (ui_debug->integer) {
         UI_DrawString(uis.width - 4, 4, UI_RIGHT,

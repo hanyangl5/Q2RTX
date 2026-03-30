@@ -7,6 +7,7 @@ project(quake2-RTX)
 set(Q2RTX_VERSION_MAJOR 1)
 set(Q2RTX_VERSION_MINOR 8)
 set(Q2RTX_VERSION_POINT 1)
+set(Q2RTX_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # get short-hash
 execute_process(
@@ -46,6 +47,9 @@ OPTION(USE_SYSTEM_OPENAL "Prefer system OpenAL Soft instead of the bundled one" 
 OPTION(USE_SYSTEM_CURL "Prefer system cURL instead of the bundled one" OFF)
 OPTION(USE_SYSTEM_SDL2 "Prefer system SDL2 instead of the bundled one" OFF)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+include(cmake/Q2RTXAndroidDefaults.cmake)
+include(cmake/Q2RTXStageAndroidProject.cmake)
 
 # use dynamic zlib for steam runtime
 IF(CONFIG_LINUX_STEAM_RUNTIME_SUPPORT)

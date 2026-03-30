@@ -879,6 +879,20 @@ static void *SV_LoadGameLibraryFrom(const char *path)
 
 static void *SV_LoadGameLibrary(const char *libdir, const char *gamedir)
 {
+#ifdef __ANDROID__
+    char soname[MAX_OSPATH];
+
+    if (Q_snprintf(soname, sizeof(soname), "libgame%s.so", CPUSTRING) >= sizeof(soname)) {
+        Com_EPrintf("Android game library soname length exceeded\n");
+        return NULL;
+    }
+
+    if (gamedir && gamedir[0] && strcmp(gamedir, BASEGAME)) {
+        Com_WPrintf("Android build is using the packaged game library for %s\n", gamedir);
+    }
+
+    return SV_LoadGameLibraryFrom(soname);
+#else
     char path[MAX_OSPATH];
 
     if (Q_concat(path, sizeof(path), libdir,
@@ -894,6 +908,7 @@ static void *SV_LoadGameLibrary(const char *libdir, const char *gamedir)
     }
 
     return SV_LoadGameLibraryFrom(path);
+#endif
 }
 
 /*

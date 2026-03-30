@@ -1430,14 +1430,21 @@ vkpt_textures_initialize()
 	_VK(vkCreateDescriptorSetLayout(qvk.device, &layout_info, NULL, &qvk.desc_set_layout_textures));
 	ATTACH_LABEL_VARIABLE(qvk.desc_set_layout_textures, DESCRIPTOR_SET_LAYOUT);
 
+	const uint32_t texture_descriptor_set_count = 2;
+	const uint32_t normalize_descriptor_set_count = MAX_FRAMES_IN_FLIGHT;
+	const uint32_t combined_image_sampler_bindings_per_set = MAX_RIMAGES + NUM_VKPT_IMAGES + 11;
+	const uint32_t storage_image_bindings_per_texture_set = NUM_VKPT_IMAGES + 1;
+	const uint32_t storage_image_bindings_per_normalize_set = MAX_RIMAGES;
+
 	VkDescriptorPoolSize pool_sizes[] = {
 		{
 			.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.descriptorCount = MAX_FRAMES_IN_FLIGHT * (MAX_RIMAGES + 2 * NUM_VKPT_IMAGES) + 128,
+			.descriptorCount = texture_descriptor_set_count * combined_image_sampler_bindings_per_set + 128,
 		},
 		{
 			.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-			.descriptorCount = MAX_FRAMES_IN_FLIGHT * MAX_RIMAGES
+			.descriptorCount = texture_descriptor_set_count * storage_image_bindings_per_texture_set
+			                 + normalize_descriptor_set_count * storage_image_bindings_per_normalize_set
 		}
 	};
 
@@ -1445,8 +1452,11 @@ vkpt_textures_initialize()
 		.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 		.poolSizeCount = LENGTH(pool_sizes),
 		.pPoolSizes    = pool_sizes,
-		.maxSets       = MAX_FRAMES_IN_FLIGHT * 2,
+		.maxSets       = texture_descriptor_set_count + normalize_descriptor_set_count + MAX_FRAMES_IN_FLIGHT,
 	};
+
+	Com_Printf("Texture descriptor pool: %u combined samplers, %u storage images, %u sets\n",
+		pool_sizes[0].descriptorCount, pool_sizes[1].descriptorCount, pool_info.maxSets);
 
 	_VK(vkCreateDescriptorPool(qvk.device, &pool_info, NULL, &desc_pool_textures));
 	ATTACH_LABEL_VARIABLE(desc_pool_textures, DESCRIPTOR_POOL);
@@ -2404,8 +2414,13 @@ static VkResult lazy_image_create(vkpt_lazy_image_t *lazy_image, int w, int h, V
 		image_create_info.flags |= VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT;
 #endif
 
+	VkImage *images_local = NULL;
+#ifdef VKPT_DEVICE_GROUPS
+	images_local = lazy_image->image_local;
+#endif
+
 	VkDeviceSize image_size = 0;
-	VkResult create_result = create_image(&image_create_info, &lazy_image->image, &lazy_image->image_mem, lazy_image->image_local, &image_size);
+	VkResult create_result = create_image(&image_create_info, &lazy_image->image, &lazy_image->image_mem, images_local, &image_size);
 	if (create_result != VK_SUCCESS)
 	{
 		Com_Printf("Memory allocation error. Failed chunk = %.2f MB\n", (float)image_size / megabyte);

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Q2RTX Android Demo</string>
+    <string name="launcher_summary">Copy your retail Quake II pak files plus q2rtx_media.pkz, blue_noise.pkz, and shaders.pkz into the folder below. This build targets Android 14 arm64 devices and performs the final Vulkan ray tracing compatibility check during native startup.</string>
+    <string name="import_path_label">Import assets into:</string>
+    <string name="start_demo">Start Demo</string>
+</resources>

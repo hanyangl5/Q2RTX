@@ -489,7 +489,7 @@ static const VkApplicationInfo vk_app_info = {
 	.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
 	.pEngineName        = "vkpt",
 	.engineVersion      = VK_MAKE_VERSION(1, 0, 0),
-	.apiVersion         = VK_API_VERSION_1_2,
+	.apiVersion         = VK_API_VERSION_1_3,
 };
 
 /* use this to override file names */
@@ -701,9 +701,32 @@ create_swapchain(void)
 		qvk.extent_unscaled.height = max(surf_capabilities.minImageExtent.height, qvk.extent_unscaled.height);
 	}
 
+#ifdef __ANDROID__
+	if (qvk.extent_unscaled.height > qvk.extent_unscaled.width) {
+		uint32_t raw_width = qvk.extent_unscaled.width;
+		uint32_t raw_height = qvk.extent_unscaled.height;
+		uint32_t tmp = qvk.extent_unscaled.width;
+		qvk.extent_unscaled.width = qvk.extent_unscaled.height;
+		qvk.extent_unscaled.height = tmp;
+		Com_Printf("Android surface extent normalized from %ux%u to %ux%u (transform=%u)\n",
+			raw_width, raw_height, qvk.extent_unscaled.width, qvk.extent_unscaled.height,
+			(unsigned)surf_capabilities.currentTransform);
+	}
+#endif
+
 	uint32_t num_images = max(surf_capabilities.minImageCount, 2);
 	if(surf_capabilities.maxImageCount > 0)
 		num_images = min(num_images, surf_capabilities.maxImageCount);
+
+	VkSurfaceTransformFlagBitsKHR pre_transform = surf_capabilities.currentTransform;
+#ifdef __ANDROID__
+	if (surf_capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
+		pre_transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	}
+	Com_Printf("Android surface transform current=%u chosen=%u supported=0x%x\n",
+		(unsigned)surf_capabilities.currentTransform, (unsigned)pre_transform,
+		(unsigned)surf_capabilities.supportedTransforms);
+#endif
 
 	VkSwapchainCreateInfoKHR swpch_create_info = {
 		.sType                 = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -719,7 +742,7 @@ create_swapchain(void)
 		.imageSharingMode      = VK_SHARING_MODE_EXCLUSIVE, /* VK_SHARING_MODE_CONCURRENT if not using same queue */
 		.queueFamilyIndexCount = 0,
 		.pQueueFamilyIndices   = NULL,
-		.preTransform          = surf_capabilities.currentTransform,
+		.preTransform          = pre_transform,
 		.compositeAlpha        = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, /* no alpha for window transparency */
 		.presentMode           = qvk.present_mode,
 		.clipped               = VK_FALSE, /* do not render pixels that are occluded by other windows */
@@ -1079,14 +1102,6 @@ init_vulkan(void)
 		{
 			Com_Printf("  %s\n", ext_properties[j].extensionName);
 
-			if(!strcmp(ext_properties[j].extensionName, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) 
-			{
-				if (picked_device_with_ray_pipeline < 0)
-				{
-					picked_device_with_ray_pipeline = i;
-				}
-			}
-
 			if (!strcmp(ext_properties[j].extensionName, VK_KHR_RAY_QUERY_EXTENSION_NAME))
 			{
 				if (picked_device_with_ray_query < 0)
@@ -1095,6 +1110,15 @@ init_vulkan(void)
 					picked_driver_ray_query = driver_properties.driverID;
 				}
 			}
+			
+			// if(!strcmp(ext_properties[j].extensionName, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) 
+			// {
+			// 	if (picked_device_with_ray_pipeline < 0)
+			// 	{
+			// 		picked_device_with_ray_pipeline = i;
+			// 	}
+			// }
+
 		}
 	}
 
@@ -1139,7 +1163,10 @@ init_vulkan(void)
 
 	if (picked_device < 0)
 	{
-		Com_Error(ERR_FATAL, "No ray tracing capable GPU found.");
+		Com_Error(ERR_FATAL,
+			"No ray tracing capable GPU found. This Android demo requires Vulkan ray tracing support "
+			"(VK_KHR_acceleration_structure plus VK_KHR_ray_tracing_pipeline or VK_KHR_ray_query) "
+			"on a high-end Snapdragon/Adreno device.");
 	}
 
 	qvk.physical_device = devices[picked_device];
@@ -3350,6 +3377,17 @@ recreate_swapchain(void)
 	vkpt_destroy_all(VKPT_INIT_SWAPCHAIN_RECREATE);
 	destroy_swapchain();
 	SDL_Vulkan_GetDrawableSize(qvk.window, &qvk.draw_width, &qvk.draw_height);
+#ifdef __ANDROID__
+	if (qvk.draw_height > qvk.draw_width) {
+		int raw_width = qvk.draw_width;
+		int raw_height = qvk.draw_height;
+		int tmp = qvk.draw_width;
+		qvk.draw_width = qvk.draw_height;
+		qvk.draw_height = tmp;
+		Com_Printf("Android swapchain size normalized from %dx%d to %dx%d\n",
+			raw_width, raw_height, qvk.draw_width, qvk.draw_height);
+	}
+#endif
 	r_config.width = qvk.draw_width;
 	r_config.height = qvk.draw_height;
 	create_swapchain();

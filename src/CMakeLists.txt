@@ -230,6 +230,17 @@ SET(SRC_LINUX_CLIENT
 	unix/video/sdl.c
 )
 
+SET(SRC_ANDROID
+	android/system.c
+	unix/hunk.c
+)
+
+SET(SRC_ANDROID_CLIENT
+	android/android_input.c
+	unix/sound/sdl.c
+	unix/video/sdl.c
+)
+
 SET(SRC_WINDOWS
 	windows/ac.c
 	windows/debug.c
@@ -351,30 +362,30 @@ set(SRC_RT_SHADERS
 	refresh/vkpt/shader/reflect_refract.rgen
 )
 
-# Only build shaders in 64-bit builds, because the client
-# is also only built for 64-bit systems.
-IF(IS_64_BIT)
-    include(../cmake/compileShaders.cmake)
+# Only build shaders in 64-bit desktop builds. Android loads prebuilt
+# shader bytecode from external data instead of compiling it at build time.
+# IF(IS_64_BIT AND NOT ANDROID)
+#     include(../cmake/compileShaders.cmake)
 
-    foreach(s ${SRC_RT_SHADERS})
-        get_filename_component(shader_name ${s} NAME)
-        get_filename_component(shader_ext ${s} EXT)
-        compile_shader(SOURCE_FILE ${s} OUTPUT_FILE_LIST shader_bytecode OUTPUT_FILE_NAME "${shader_name}.pipeline")
-        if (shader_ext STREQUAL ".rgen")
-            compile_shader(SOURCE_FILE ${s} OUTPUT_FILE_LIST shader_bytecode OUTPUT_FILE_NAME "${shader_name}.query" DEFINES "-DKHR_RAY_QUERY" STAGE "comp")
-        endif()
-    endforeach()
+#     foreach(s ${SRC_RT_SHADERS})
+#         get_filename_component(shader_name ${s} NAME)
+#         get_filename_component(shader_ext ${s} EXT)
+#         compile_shader(SOURCE_FILE ${s} OUTPUT_FILE_LIST shader_bytecode OUTPUT_FILE_NAME "${shader_name}.pipeline")
+#         if (shader_ext STREQUAL ".rgen")
+#             compile_shader(SOURCE_FILE ${s} OUTPUT_FILE_LIST shader_bytecode OUTPUT_FILE_NAME "${shader_name}.query" DEFINES "-DKHR_RAY_QUERY" STAGE "comp")
+#         endif()
+#     endforeach()
 
-    foreach(s ${SRC_SHADERS})
-        compile_shader(SOURCE_FILE ${s} INCLUDES "-I${CMAKE_CURRENT_SOURCE_DIR}/refresh/vkpt/fsr" OUTPUT_FILE_LIST shader_bytecode)
-    endforeach()
+#     foreach(s ${SRC_SHADERS})
+#         compile_shader(SOURCE_FILE ${s} INCLUDES "-I${CMAKE_CURRENT_SOURCE_DIR}/refresh/vkpt/fsr" OUTPUT_FILE_LIST shader_bytecode)
+#     endforeach()
 
-    add_custom_target(shaders DEPENDS ${shader_bytecode})
+#     add_custom_target(shaders DEPENDS ${shader_bytecode})
 
-    if(TARGET glslang-standalone)
-        add_dependencies(shaders glslang-standalone)
-    endif()
-ENDIF()
+#     if(TARGET glslang-standalone)
+#         add_dependencies(shaders glslang-standalone)
+#     endif()
+# ENDIF()
 
 # Embed version number
 ADD_DEFINITIONS(-DVERSION_MAJOR=${Q2RTX_VERSION_MAJOR})
@@ -431,6 +442,7 @@ endif()
 target_compile_definitions(game PRIVATE USE_PROTOCOL_EXTENSIONS=1)
 
 set(COMMON_COMPILE_DEFS "USE_SAVEGAMES=1" "USE_PROTOCOL_EXTENSIONS=1")
+set(CLIENT_TARGET client)
 
 IF(WIN32)
     IF(IS_64_BIT)
@@ -453,6 +465,18 @@ IF(WIN32)
         client/null.c
         windows/res/q2rtxded.rc
     )
+ELSEIF(ANDROID)
+    if(IS_64_BIT)
+        set(CLIENT_TARGET main)
+        add_library(${CLIENT_TARGET} SHARED
+            ${SRC_CLIENT} ${HEADERS_CLIENT}
+            ${SRC_COMMON} ${HEADERS_COMMON}
+            ${SRC_REFRESH} ${SRC_SHADERS}
+            ${SRC_SHARED}
+            ${SRC_ANDROID} ${SRC_ANDROID_CLIENT}
+            ${SRC_SERVER} ${HEADERS_SERVER}
+        )
+    endif()
 ELSE()
     IF(IS_64_BIT)
         ADD_EXECUTABLE(client
@@ -474,46 +498,50 @@ ELSE()
     )
 ENDIF()
 
-TARGET_COMPILE_DEFINITIONS(server PRIVATE USE_SERVER=1 "${COMMON_COMPILE_DEFS}")
-target_compile_options(server PRIVATE "${WARN_MISSING_PROTOTYPES}")
+if(TARGET server)
+    TARGET_COMPILE_DEFINITIONS(server PRIVATE USE_SERVER=1 "${COMMON_COMPILE_DEFS}")
+    target_compile_options(server PRIVATE "${WARN_MISSING_PROTOTYPES}")
+endif()
 
-IF (TARGET client)
-    TARGET_COMPILE_DEFINITIONS(client PRIVATE USE_CLIENT=1 USE_FIXED_LIBAL=1 USE_SDL=1 "${COMMON_COMPILE_DEFS}")
+IF (TARGET ${CLIENT_TARGET})
+    TARGET_COMPILE_DEFINITIONS(${CLIENT_TARGET} PRIVATE USE_CLIENT=1 USE_FIXED_LIBAL=1 USE_SDL=1 "${COMMON_COMPILE_DEFS}")
 
     IF(CONFIG_USE_CURL)
-        TARGET_LINK_LIBRARIES(client libcurl)
-        TARGET_SOURCES(client PRIVATE ${SRC_CLIENT_HTTP})
-        TARGET_COMPILE_DEFINITIONS(client PRIVATE USE_CURL=1)
+        TARGET_LINK_LIBRARIES(${CLIENT_TARGET} libcurl)
+        TARGET_SOURCES(${CLIENT_TARGET} PRIVATE ${SRC_CLIENT_HTTP})
+        TARGET_COMPILE_DEFINITIONS(${CLIENT_TARGET} PRIVATE USE_CURL=1)
     ENDIF()
 
-    add_dependencies(client shaders)
+    if(TARGET shaders)
+        add_dependencies(${CLIENT_TARGET} shaders)
+    endif()
 
     IF (CONFIG_GL_RENDERER)
-        TARGET_SOURCES(client PRIVATE ${SRC_GL} ${HEADERS_GL})
-        TARGET_COMPILE_DEFINITIONS(client PRIVATE REF_GL=1 USE_REF=1)
+        TARGET_SOURCES(${CLIENT_TARGET} PRIVATE ${SRC_GL} ${HEADERS_GL})
+        TARGET_COMPILE_DEFINITIONS(${CLIENT_TARGET} PRIVATE REF_GL=1 USE_REF=1)
     ENDIF()
 
     IF (CONFIG_VKPT_RENDERER)
-        TARGET_SOURCES(client PRIVATE ${SRC_VKPT} ${HEADERS_VKPT})
-        TARGET_INCLUDE_DIRECTORIES(client PRIVATE ${CMAKE_SOURCE_DIR}/extern/Vulkan-Headers/include)
-        LINK_DIRECTORIES(client PRIVATE ${CMAKE_SOURCE_DIR})
-        TARGET_COMPILE_DEFINITIONS(client PRIVATE REF_VKPT=1 USE_REF=1)
+        TARGET_SOURCES(${CLIENT_TARGET} PRIVATE ${SRC_VKPT} ${HEADERS_VKPT})
+        TARGET_INCLUDE_DIRECTORIES(${CLIENT_TARGET} PRIVATE ${Q2RTX_REPO_ROOT}/extern/Vulkan-Headers/include)
+        LINK_DIRECTORIES(${CLIENT_TARGET} PRIVATE ${Q2RTX_REPO_ROOT})
+        TARGET_COMPILE_DEFINITIONS(${CLIENT_TARGET} PRIVATE REF_VKPT=1 USE_REF=1)
         IF (CONFIG_VKPT_ENABLE_DEVICE_GROUPS)
-            TARGET_COMPILE_DEFINITIONS(client PRIVATE VKPT_DEVICE_GROUPS)
+            TARGET_COMPILE_DEFINITIONS(${CLIENT_TARGET} PRIVATE VKPT_DEVICE_GROUPS)
         ENDIF()
         if (CONFIG_VKPT_ENABLE_IMAGE_DUMPS)
-            TARGET_COMPILE_DEFINITIONS(client PRIVATE VKPT_IMAGE_DUMPS)
+            TARGET_COMPILE_DEFINITIONS(${CLIENT_TARGET} PRIVATE VKPT_IMAGE_DUMPS)
         ENDIF()
         IF (WIN32)
-        TARGET_LINK_LIBRARIES(client vulkan-1)
+        TARGET_LINK_LIBRARIES(${CLIENT_TARGET} vulkan-1)
         ELSE ()
-        TARGET_LINK_LIBRARIES(client vulkan)
+        TARGET_LINK_LIBRARIES(${CLIENT_TARGET} vulkan)
         ENDIF()
     ENDIF()
 
-    TARGET_LINK_LIBRARIES(client stb)
-    TARGET_LINK_LIBRARIES(client tinyobjloader)
-    TARGET_LINK_LIBRARIES(client OpenAL)
+    TARGET_LINK_LIBRARIES(${CLIENT_TARGET} stb)
+    TARGET_LINK_LIBRARIES(${CLIENT_TARGET} tinyobjloader)
+    TARGET_LINK_LIBRARIES(${CLIENT_TARGET} OpenAL)
 ENDIF()
 
 SOURCE_GROUP("game\\sources" FILES ${SRC_GAME})
@@ -532,12 +560,12 @@ SOURCE_GROUP("windows\\sources" FILES ${SRC_WINDOWS})
 SOURCE_GROUP("windows\\headers" FILES ${HEADERS_WINDOWS})
 
 IF (WIN32)
-    IF(TARGET client)
-        TARGET_INCLUDE_DIRECTORIES(client PRIVATE ../VC/inc)
-        TARGET_LINK_LIBRARIES(client winmm ws2_32)
-        SET_TARGET_PROPERTIES(client PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    IF(TARGET ${CLIENT_TARGET})
+        TARGET_INCLUDE_DIRECTORIES(${CLIENT_TARGET} PRIVATE ../VC/inc)
+        TARGET_LINK_LIBRARIES(${CLIENT_TARGET} winmm ws2_32)
+        SET_TARGET_PROPERTIES(${CLIENT_TARGET} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
         # macro redefinition, deprecation
-        TARGET_COMPILE_OPTIONS(client PRIVATE /wd4005 /wd4996)
+        TARGET_COMPILE_OPTIONS(${CLIENT_TARGET} PRIVATE /wd4005 /wd4996)
     ENDIF()
 
     TARGET_INCLUDE_DIRECTORIES(server PRIVATE ../VC/inc)
@@ -555,37 +583,75 @@ ENDIF()
 
 TARGET_INCLUDE_DIRECTORIES(game PRIVATE ../inc)
 
-IF(TARGET client)
-    TARGET_INCLUDE_DIRECTORIES(client PRIVATE ../inc)
+IF(TARGET ${CLIENT_TARGET})
+    TARGET_INCLUDE_DIRECTORIES(${CLIENT_TARGET} PRIVATE ../inc)
 ENDIF()
 
-TARGET_INCLUDE_DIRECTORIES(server PRIVATE ../inc)
+if(TARGET server)
+    TARGET_INCLUDE_DIRECTORIES(server PRIVATE ../inc)
+endif()
 
-if(TARGET client)
+if(TARGET ${CLIENT_TARGET})
     if (USE_SYSTEM_SDL2)
-        TARGET_LINK_LIBRARIES(client SDL2)
+        TARGET_LINK_LIBRARIES(${CLIENT_TARGET} SDL2)
     else()
-        TARGET_LINK_LIBRARIES(client SDL2main SDL2-static)
+        if(ANDROID)
+            TARGET_LINK_LIBRARIES(${CLIENT_TARGET} SDL2)
+        else()
+            TARGET_LINK_LIBRARIES(${CLIENT_TARGET} SDL2main SDL2-static)
+        endif()
     endif()
 endif()
 
-TARGET_LINK_LIBRARIES(server z)
+if(TARGET server)
+    TARGET_LINK_LIBRARIES(server z)
+endif()
 TARGET_LINK_LIBRARIES(game z)
-if(TARGET client)
-    TARGET_LINK_LIBRARIES(client z)
+if(TARGET ${CLIENT_TARGET})
+    TARGET_LINK_LIBRARIES(${CLIENT_TARGET} z)
 endif()
 
 IF(UNIX)
-    TARGET_LINK_LIBRARIES(server dl rt m pthread)
-    IF(TARGET client)
-        TARGET_LINK_LIBRARIES(client m)
+    if(TARGET server)
+        if(ANDROID)
+            TARGET_LINK_LIBRARIES(server dl m)
+        else()
+            TARGET_LINK_LIBRARIES(server dl rt m pthread)
+        endif()
+    endif()
+    IF(TARGET ${CLIENT_TARGET})
+        if(ANDROID)
+            TARGET_LINK_LIBRARIES(${CLIENT_TARGET} android dl log m)
+        else()
+            TARGET_LINK_LIBRARIES(${CLIENT_TARGET} m)
+        endif()
     ENDIF()
 ENDIF()
 
-IF(TARGET client)
-    SET_TARGET_PROPERTIES(client
+IF(TARGET ${CLIENT_TARGET})
+    if(ANDROID)
+        SET_TARGET_PROPERTIES(${CLIENT_TARGET}
+            PROPERTIES
+            OUTPUT_NAME "main"
+            DEBUG_POSTFIX ""
+        )
+    else()
+        SET_TARGET_PROPERTIES(${CLIENT_TARGET}
+            PROPERTIES
+            OUTPUT_NAME "q2rtx"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}"
+            RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}"
+            DEBUG_POSTFIX ""
+        )
+    endif()
+ENDIF()
+
+if(TARGET server)
+    SET_TARGET_PROPERTIES(server
         PROPERTIES
-        OUTPUT_NAME "q2rtx"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}"
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
@@ -593,41 +659,40 @@ IF(TARGET client)
         RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}"
         DEBUG_POSTFIX ""
     )
-ENDIF()
+endif()
 
-SET_TARGET_PROPERTIES(server
-    PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}"
-    DEBUG_POSTFIX ""
-)
-
-IF (IS_64_BIT)
-    SET_TARGET_PROPERTIES(server PROPERTIES OUTPUT_NAME "q2rtxded")
-ELSE()
-    SET_TARGET_PROPERTIES(server PROPERTIES OUTPUT_NAME "q2rtxded-x86")
-ENDIF()
+if(TARGET server)
+    IF (IS_64_BIT)
+        SET_TARGET_PROPERTIES(server PROPERTIES OUTPUT_NAME "q2rtxded")
+    ELSE()
+        SET_TARGET_PROPERTIES(server PROPERTIES OUTPUT_NAME "q2rtxded-x86")
+    ENDIF()
+endif()
 
 # specify both LIBRARY and RUNTIME because one works only on Windows and another works only on Linux
 
-SET_TARGET_PROPERTIES(game
-    PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/baseq2"
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/baseq2"
-    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/baseq2"
-    LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/baseq2"
-    LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/baseq2"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/baseq2"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/baseq2"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/baseq2"
-    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/baseq2"
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/baseq2"
-    PREFIX ""
-    DEBUG_POSTFIX ""
-)
+if(ANDROID)
+    SET_TARGET_PROPERTIES(game
+        PROPERTIES
+        DEBUG_POSTFIX ""
+    )
+else()
+    SET_TARGET_PROPERTIES(game
+        PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/baseq2"
+        LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/baseq2"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/baseq2"
+        LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/baseq2"
+        LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/baseq2"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/baseq2"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/baseq2"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/baseq2"
+        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/baseq2"
+        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/baseq2"
+        PREFIX ""
+        DEBUG_POSTFIX ""
+    )
+endif()
 
 IF(IS_64_BIT)
 	IF(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
@@ -663,10 +728,10 @@ ELSE()
     )
 ENDIF()
 
-IF(CONFIG_LINUX_PACKAGING_SUPPORT)
+IF(CONFIG_LINUX_PACKAGING_SUPPORT AND NOT ANDROID)
     # Put the real game binary in /usr/share so we can have a wrapper in /usr/bin
-    IF(TARGET client)
-        INSTALL(TARGETS client DESTINATION share/quake2rtx/bin COMPONENT shareware)
+    IF(TARGET ${CLIENT_TARGET})
+        INSTALL(TARGETS ${CLIENT_TARGET} DESTINATION share/quake2rtx/bin COMPONENT shareware)
     ENDIF()
     INSTALL(TARGETS server DESTINATION games COMPONENT shareware)
 
