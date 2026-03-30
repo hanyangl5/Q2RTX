@@ -99,7 +99,7 @@ cvar_t *cvar_flt_fsr_sharpness = NULL;
 void vkpt_fsr_init_cvars()
 {
 	// FSR enable toggle
-	cvar_flt_fsr_enable = Cvar_Get("flt_fsr_enable", "0", CVAR_ARCHIVE);
+	cvar_flt_fsr_enable = Cvar_Get("flt_fsr_enable", "1", CVAR_ARCHIVE);
 	// FSR EASU (upscaling) toggle
 	cvar_flt_fsr_easu = Cvar_Get("flt_fsr_easu", "1", CVAR_ARCHIVE);
 	// FSR RCAS (sharpening) toggle

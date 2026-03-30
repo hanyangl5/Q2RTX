@@ -2920,8 +2920,8 @@ prepare_ubo(refdef_t *fd, mleaf_t* viewleaf, const reference_mode_t* ref_mode, c
 	ubo->temporal_blend_factor = ref_mode->temporal_blend_factor;
 	ubo->flt_enable = ref_mode->enable_denoiser;
 	ubo->flt_taa = qvk.effective_aa_mode;
-	ubo->pt_num_bounce_rays = ref_mode->num_bounce_rays;
-	ubo->pt_reflect_refract = ref_mode->reflect_refract;
+	ubo->pt_num_bounce_rays = 0.5;//ref_mode->num_bounce_rays;
+	ubo->pt_reflect_refract = 1; //ref_mode->reflect_refract;
 
 	if (ref_mode->num_bounce_rays < 1.f)
 		ubo->pt_specular_mis = 0; // disable MIS if there are no specular rays
@@ -3415,10 +3415,10 @@ static void drs_init(void)
 	cvar_drs_target = Cvar_Get("drs_target", "60", CVAR_ARCHIVE);
 	cvar_drs_target->changed = drs_target_changed;
 	// Minimum resolution scale in percents
-	cvar_drs_minscale = Cvar_Get("drs_minscale", "50", 0);
+	cvar_drs_minscale = Cvar_Get("drs_minscale", "25", 0);
 	cvar_drs_minscale->changed = drs_minscale_changed;
 	// Maximum resolution scale in percents
-	cvar_drs_maxscale = Cvar_Get("drs_maxscale", "100", 0);
+	cvar_drs_maxscale = Cvar_Get("drs_maxscale", "50", 0);
 	cvar_drs_maxscale->changed = drs_maxscale_changed;
 	// Resolution regulator parameters, see the `dynamic_resolution_scaling()` function
 	cvar_drs_gain = Cvar_Get("drs_gain", "20", 0);
@@ -3808,7 +3808,7 @@ R_Init_RTX(bool total)
 	cvar_vsync = Cvar_Get("vid_vsync", "0", CVAR_ARCHIVE);
 	cvar_vsync->changed = NULL; // in case the GL renderer has set it
 	cvar_hdr = Cvar_Get("vid_hdr", "0", CVAR_ARCHIVE);
-	cvar_pt_caustics = Cvar_Get("pt_caustics", "1", CVAR_ARCHIVE);
+	cvar_pt_caustics = Cvar_Get("pt_caustics", "0", CVAR_ARCHIVE);
 	cvar_pt_enable_nodraw = Cvar_Get("pt_enable_nodraw", "0", 0);
 	/* Synthesize materials for surfaces with LIGHT flag.
 	 * 0: disabled

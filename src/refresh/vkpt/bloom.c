@@ -129,7 +129,7 @@ void vkpt_bloom_update(QVKUniformBuffer_t * ubo, float frame_time, bool under_wa
 VkResult
 vkpt_bloom_initialize()
 {
-	cvar_bloom_enable = Cvar_Get("bloom_enable", "1", 0);
+	cvar_bloom_enable = Cvar_Get("bloom_enable", "0", 0);
 	cvar_bloom_debug = Cvar_Get("bloom_debug", "0", 0);
 	cvar_bloom_sigma = Cvar_Get("bloom_sigma", "0.037", 0); // relative to screen height
 	cvar_bloom_intensity = Cvar_Get("bloom_intensity", "0.002", 0);

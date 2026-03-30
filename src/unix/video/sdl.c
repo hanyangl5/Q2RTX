@@ -493,6 +493,7 @@ static void window_event(SDL_WindowEvent *event)
 {
     Uint32 flags = SDL_GetWindowFlags(sdl.window);
     active_t active;
+    vrect_t rc;
 
     // wayland doesn't set SDL_WINDOW_*_FOCUS flags
     if (sdl.wayland) {

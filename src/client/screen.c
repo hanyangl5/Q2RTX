@@ -2089,10 +2089,6 @@ static void SCR_Draw2D(void)
 
     SCR_DrawTurtle();
 
-#ifdef __ANDROID__
-    Android_InputDrawControls(scr.hud_width, scr.hud_height);
-#endif
-
     SCR_DrawPause();
 
     // debug stats have no alpha
@@ -2185,6 +2181,10 @@ void SCR_UpdateScreen(void)
 
     // draw main menu
     UI_Draw(cls.realtime);
+
+#ifdef __ANDROID__
+    Android_InputDrawControls(scr.hud_width, scr.hud_height);
+#endif
 
     // draw console
     Con_DrawConsole();
