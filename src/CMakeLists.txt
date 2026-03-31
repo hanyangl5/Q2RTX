@@ -364,28 +364,28 @@ set(SRC_RT_SHADERS
 
 # Only build shaders in 64-bit desktop builds. Android loads prebuilt
 # shader bytecode from external data instead of compiling it at build time.
-# IF(IS_64_BIT AND NOT ANDROID)
-#     include(../cmake/compileShaders.cmake)
+IF(IS_64_BIT AND NOT ANDROID)
+    include(../cmake/compileShaders.cmake)
 
-#     foreach(s ${SRC_RT_SHADERS})
-#         get_filename_component(shader_name ${s} NAME)
-#         get_filename_component(shader_ext ${s} EXT)
-#         compile_shader(SOURCE_FILE ${s} OUTPUT_FILE_LIST shader_bytecode OUTPUT_FILE_NAME "${shader_name}.pipeline")
-#         if (shader_ext STREQUAL ".rgen")
-#             compile_shader(SOURCE_FILE ${s} OUTPUT_FILE_LIST shader_bytecode OUTPUT_FILE_NAME "${shader_name}.query" DEFINES "-DKHR_RAY_QUERY" STAGE "comp")
-#         endif()
-#     endforeach()
+    foreach(s ${SRC_RT_SHADERS})
+        get_filename_component(shader_name ${s} NAME)
+        get_filename_component(shader_ext ${s} EXT)
+        compile_shader(SOURCE_FILE ${s} OUTPUT_FILE_LIST shader_bytecode OUTPUT_FILE_NAME "${shader_name}.pipeline")
+        if (shader_ext STREQUAL ".rgen")
+            compile_shader(SOURCE_FILE ${s} OUTPUT_FILE_LIST shader_bytecode OUTPUT_FILE_NAME "${shader_name}.query" DEFINES "-DKHR_RAY_QUERY" STAGE "comp")
+        endif()
+    endforeach()
 
-#     foreach(s ${SRC_SHADERS})
-#         compile_shader(SOURCE_FILE ${s} INCLUDES "-I${CMAKE_CURRENT_SOURCE_DIR}/refresh/vkpt/fsr" OUTPUT_FILE_LIST shader_bytecode)
-#     endforeach()
+    foreach(s ${SRC_SHADERS})
+        compile_shader(SOURCE_FILE ${s} INCLUDES "-I${CMAKE_CURRENT_SOURCE_DIR}/refresh/vkpt/fsr" OUTPUT_FILE_LIST shader_bytecode)
+    endforeach()
 
-#     add_custom_target(shaders DEPENDS ${shader_bytecode})
+    add_custom_target(shaders DEPENDS ${shader_bytecode})
 
-#     if(TARGET glslang-standalone)
-#         add_dependencies(shaders glslang-standalone)
-#     endif()
-# ENDIF()
+    if(TARGET glslang-standalone)
+        add_dependencies(shaders glslang-standalone)
+    endif()
+ENDIF()
 
 # Embed version number
 ADD_DEFINITIONS(-DVERSION_MAJOR=${Q2RTX_VERSION_MAJOR})
