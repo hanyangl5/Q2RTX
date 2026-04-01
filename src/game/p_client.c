@@ -640,6 +640,21 @@ void SaveClientData(void)
     }
 }
 
+static void lock_player_health(edict_t *ent)
+{
+    if (!ent || !ent->client || ent->client->resp.spectator) {
+        return;
+    }
+
+    if (ent->client->pers.max_health < 100) {
+        ent->client->pers.max_health = 100;
+    }
+
+    ent->max_health = ent->client->pers.max_health;
+    ent->health = ent->max_health;
+    ent->client->pers.health = ent->health;
+}
+
 void FetchClientEntData(edict_t *ent)
 {
     ent->health = ent->client->pers.health;
@@ -647,6 +662,7 @@ void FetchClientEntData(edict_t *ent)
     ent->flags |= ent->client->pers.savedFlags;
     if (coop->value)
         ent->client->resp.score = ent->client->pers.score;
+    lock_player_health(ent);
 }
 
 /*
@@ -1697,6 +1713,7 @@ void ClientBeginServerFrame(edict_t *ent)
         return;
 
     client = ent->client;
+    lock_player_health(ent);
 
     if (deathmatch->value &&
         client->pers.spectator != client->resp.spectator &&

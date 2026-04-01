@@ -130,7 +130,7 @@ unsigned Sys_Milliseconds(void)
 
 void Sys_Quit(void)
 {
-#if USE_SDL
+#if USE_SDL && !defined(__ANDROID__)
     SDL_Quit();
 #endif
     exit(EXIT_SUCCESS);

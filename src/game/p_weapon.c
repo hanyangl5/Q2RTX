@@ -25,6 +25,15 @@ static byte     is_silenced;
 
 void weapon_grenade_fire(edict_t *ent, bool held);
 
+static int scale_player_weapon_damage(edict_t *ent, int damage)
+{
+    if (!ent || !ent->client) {
+        return damage;
+    }
+
+    return damage * 10;
+}
+
 static void P_ProjectSource(edict_t *ent, vec3_t point, vec3_t distance, vec3_t forward, vec3_t right, vec3_t result)
 {
     vec3_t  _distance;
@@ -499,6 +508,7 @@ void weapon_grenade_fire(edict_t *ent, bool held)
     radius = damage + 40;
     if (is_quad)
         damage *= 4;
+    damage = scale_player_weapon_damage(ent, damage);
 
     VectorSet(offset, 8, 8, ent->viewheight - 8);
     AngleVectors(ent->client->v_angle, forward, right, NULL);
@@ -637,6 +647,7 @@ void weapon_grenadelauncher_fire(edict_t *ent)
     radius = damage + 40;
     if (is_quad)
         damage *= 4;
+    damage = scale_player_weapon_damage(ent, damage);
 
     VectorSet(offset, 8, 8, ent->viewheight - 8);
     AngleVectors(ent->client->v_angle, forward, right, NULL);
@@ -691,6 +702,8 @@ void Weapon_RocketLauncher_Fire(edict_t *ent)
         damage *= 4;
         radius_damage *= 4;
     }
+    damage = scale_player_weapon_damage(ent, damage);
+    radius_damage = scale_player_weapon_damage(ent, radius_damage);
 
     AngleVectors(ent->client->v_angle, forward, right, NULL);
 
@@ -739,6 +752,7 @@ void Blaster_Fire(edict_t *ent, const vec3_t g_offset, int damage, bool hyper, i
 
     if (is_quad)
         damage *= 4;
+    damage = scale_player_weapon_damage(ent, damage);
     AngleVectors(ent->client->v_angle, forward, right, NULL);
     VectorSet(offset, 24, 8, ent->viewheight - 8);
     VectorAdd(offset, g_offset, offset);
@@ -890,6 +904,7 @@ void Machinegun_Fire(edict_t *ent)
         damage *= 4;
         kick *= 4;
     }
+    damage = scale_player_weapon_damage(ent, damage);
 
     for (i = 1; i < 3; i++) {
         ent->client->kick_origin[i] = crandom() * 0.35f;
@@ -1012,6 +1027,7 @@ void Chaingun_Fire(edict_t *ent)
         damage *= 4;
         kick *= 4;
     }
+    damage = scale_player_weapon_damage(ent, damage);
 
     for (i = 0; i < 3; i++) {
         ent->client->kick_origin[i] = crandom() * 0.35f;
@@ -1082,6 +1098,7 @@ void weapon_shotgun_fire(edict_t *ent)
         damage *= 4;
         kick *= 4;
     }
+    damage = scale_player_weapon_damage(ent, damage);
 
     if (deathmatch->value)
         fire_shotgun(ent, start, forward, damage, kick, 500, 500, DEFAULT_DEATHMATCH_SHOTGUN_COUNT, MOD_SHOTGUN);
@@ -1130,6 +1147,7 @@ void weapon_supershotgun_fire(edict_t *ent)
         damage *= 4;
         kick *= 4;
     }
+    damage = scale_player_weapon_damage(ent, damage);
 
     v[PITCH] = ent->client->v_angle[PITCH];
     v[YAW]   = ent->client->v_angle[YAW] - 5;
@@ -1214,6 +1232,7 @@ void weapon_railgun_fire(edict_t *ent)
         damage *= 4;
         kick *= 4;
     }
+    damage = scale_player_weapon_damage(ent, damage);
 
     AngleVectors(ent->client->v_angle, forward, right, NULL);
 
@@ -1287,6 +1306,7 @@ void weapon_bfg_fire(edict_t *ent)
 
     if (is_quad)
         damage *= 4;
+    damage = scale_player_weapon_damage(ent, damage);
 
     AngleVectors(ent->client->v_angle, forward, right, NULL);
 

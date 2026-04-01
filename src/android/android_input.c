@@ -15,7 +15,10 @@ Copyright (C) 2026
 
 typedef enum {
     TOUCH_ROLE_NONE,
-    TOUCH_ROLE_MOVE,
+    TOUCH_ROLE_MOVE_UP,
+    TOUCH_ROLE_MOVE_LEFT,
+    TOUCH_ROLE_MOVE_DOWN,
+    TOUCH_ROLE_MOVE_RIGHT,
     TOUCH_ROLE_LOOK,
     TOUCH_ROLE_ATTACK,
     TOUCH_ROLE_USE,
@@ -152,10 +155,16 @@ static void release_touch_slot(touch_slot_t *slot)
     }
 
     switch (slot->role) {
-    case TOUCH_ROLE_MOVE:
+    case TOUCH_ROLE_MOVE_UP:
         set_key_state('w', false);
+        break;
+    case TOUCH_ROLE_MOVE_LEFT:
         set_key_state('a', false);
+        break;
+    case TOUCH_ROLE_MOVE_DOWN:
         set_key_state('s', false);
+        break;
+    case TOUCH_ROLE_MOVE_RIGHT:
         set_key_state('d', false);
         break;
     case TOUCH_ROLE_ATTACK:
@@ -195,14 +204,73 @@ static bool is_touch_enabled(void)
     return android_touch_controls && android_touch_controls->integer != 0;
 }
 
-static void update_move_keys(float dx, float dy)
+static bool is_move_role(touch_role_t role)
 {
-    float deadzone = android_touch_deadzone ? android_touch_deadzone->value : 0.12f;
+    return role == TOUCH_ROLE_MOVE_UP ||
+        role == TOUCH_ROLE_MOVE_LEFT ||
+        role == TOUCH_ROLE_MOVE_DOWN ||
+        role == TOUCH_ROLE_MOVE_RIGHT;
+}
 
-    set_key_state('a', dx < -deadzone);
-    set_key_state('d', dx > deadzone);
-    set_key_state('w', dy < -deadzone);
-    set_key_state('s', dy > deadzone);
+static unsigned move_role_key(touch_role_t role)
+{
+    switch (role) {
+    case TOUCH_ROLE_MOVE_UP:
+        return 'w';
+    case TOUCH_ROLE_MOVE_LEFT:
+        return 'a';
+    case TOUCH_ROLE_MOVE_DOWN:
+        return 's';
+    case TOUCH_ROLE_MOVE_RIGHT:
+        return 'd';
+    default:
+        return 0;
+    }
+}
+
+static float move_pad_center_x(void)
+{
+    return (android_touch_left_handed && android_touch_left_handed->integer != 0) ? 0.84f : 0.16f;
+}
+
+static touch_role_t classify_move_role(float x, float y)
+{
+    float center_x = move_pad_center_x();
+
+    if (point_in_circle(x, y, center_x, 0.61f, 0.055f)) {
+        return TOUCH_ROLE_MOVE_UP;
+    }
+    if (point_in_circle(x, y, center_x - 0.09f, 0.72f, 0.055f)) {
+        return TOUCH_ROLE_MOVE_LEFT;
+    }
+    if (point_in_circle(x, y, center_x, 0.83f, 0.055f)) {
+        return TOUCH_ROLE_MOVE_DOWN;
+    }
+    if (point_in_circle(x, y, center_x + 0.09f, 0.72f, 0.055f)) {
+        return TOUCH_ROLE_MOVE_RIGHT;
+    }
+
+    return TOUCH_ROLE_NONE;
+}
+
+static void update_move_role(touch_slot_t *slot, float x, float y)
+{
+    touch_role_t new_role = classify_move_role(x, y);
+
+    if (!is_move_role(slot->role)) {
+        return;
+    }
+
+    if (new_role == slot->role) {
+        return;
+    }
+
+    set_key_state(move_role_key(slot->role), false);
+
+    if (is_move_role(new_role)) {
+        slot->role = new_role;
+        set_key_state(move_role_key(slot->role), true);
+    }
 }
 
 static touch_role_t classify_role(float x, float y)
@@ -212,6 +280,11 @@ static touch_role_t classify_role(float x, float y)
     float use_center_x = left_handed ? 0.26f : 0.74f;
     float jump_center_x = left_handed ? 0.08f : 0.92f;
     float menu_center_x = left_handed ? 0.06f : 0.94f;
+    touch_role_t move_role = classify_move_role(x, y);
+
+    if (move_role != TOUCH_ROLE_NONE) {
+        return move_role;
+    }
 
     if (point_in_circle(x, y, menu_center_x, 0.08f, 0.05f)) {
         return TOUCH_ROLE_MENU;
@@ -231,9 +304,6 @@ static touch_role_t classify_role(float x, float y)
     if (point_in_circle(x, y, use_center_x, 0.20f, 0.06f)) {
         return TOUCH_ROLE_WEAPON_PREV;
     }
-    if (x < 0.45f && y > 0.30f) {
-        return TOUCH_ROLE_MOVE;
-    }
 
     return TOUCH_ROLE_LOOK;
 }
@@ -247,6 +317,12 @@ static void handle_game_touch_down(touch_slot_t *slot, float x, float y)
     slot->y = y;
 
     switch (slot->role) {
+    case TOUCH_ROLE_MOVE_UP:
+    case TOUCH_ROLE_MOVE_LEFT:
+    case TOUCH_ROLE_MOVE_DOWN:
+    case TOUCH_ROLE_MOVE_RIGHT:
+        set_key_state(move_role_key(slot->role), true);
+        break;
     case TOUCH_ROLE_ATTACK:
         set_key_state(K_MOUSE1, true);
         break;
@@ -265,7 +341,6 @@ static void handle_game_touch_down(touch_slot_t *slot, float x, float y)
     case TOUCH_ROLE_MENU:
         pulse_key(K_ESCAPE);
         break;
-    case TOUCH_ROLE_MOVE:
     case TOUCH_ROLE_LOOK:
     case TOUCH_ROLE_NONE:
         break;
@@ -281,8 +356,11 @@ static void handle_game_touch_motion(touch_slot_t *slot, float x, float y, int w
     slot->y = y;
 
     switch (slot->role) {
-    case TOUCH_ROLE_MOVE:
-        update_move_keys(x - slot->anchor_x, y - slot->anchor_y);
+    case TOUCH_ROLE_MOVE_UP:
+    case TOUCH_ROLE_MOVE_LEFT:
+    case TOUCH_ROLE_MOVE_DOWN:
+    case TOUCH_ROLE_MOVE_RIGHT:
+        update_move_role(slot, x, y);
         break;
     case TOUCH_ROLE_LOOK:
         motion_x += Q_rint(dx * width * android_touch_look_sensitivity->value);
@@ -359,9 +437,6 @@ void Android_InputHandleTouch(const SDL_TouchFingerEvent *event, int width, int 
 
     if (event->type == SDL_FINGERDOWN) {
         handle_game_touch_down(slot, event->x, event->y);
-        if (slot->role == TOUCH_ROLE_MOVE) {
-            update_move_keys(0.0f, 0.0f);
-        }
         return;
     }
 
@@ -505,6 +580,7 @@ void Android_InputDrawControls(int hud_width, int hud_height)
     float use_center_x;
     float jump_center_x;
     float menu_center_x;
+    float move_center_x;
 
     if (!is_touch_enabled() || is_menu_dest() || cls.state != ca_active) {
         return;
@@ -516,12 +592,16 @@ void Android_InputDrawControls(int hud_width, int hud_height)
     use_center_x = left_handed ? 0.26f : 0.74f;
     jump_center_x = left_handed ? 0.08f : 0.92f;
     menu_center_x = left_handed ? 0.06f : 0.94f;
+    move_center_x = left_handed ? 0.84f : 0.16f;
     color = ((uint32_t)(alpha * 255.0f) << 24) | 0x00ffffff;
 
     (void)hud_width;
     (void)hud_height;
 
-    draw_button(0.16f, 0.74f, 0.13f, color);
+    draw_button(move_center_x, 0.61f, 0.055f, color);
+    draw_button(move_center_x - 0.09f, 0.72f, 0.055f, color);
+    draw_button(move_center_x, 0.83f, 0.055f, color);
+    draw_button(move_center_x + 0.09f, 0.72f, 0.055f, color);
     draw_button(action_center_x, 0.72f, 0.10f, color);
     draw_button(use_center_x, 0.82f, 0.08f, color);
     draw_button(jump_center_x, 0.56f, 0.08f, color);

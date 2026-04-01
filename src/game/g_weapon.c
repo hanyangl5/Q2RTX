@@ -17,6 +17,15 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 #include "g_local.h"
 
+static int scale_owner_damage(edict_t *ent, int damage)
+{
+    if (!ent || !ent->owner || !ent->owner->client) {
+        return damage;
+    }
+
+    return damage * 10;
+}
+
 /*
 =================
 check_dodge
@@ -729,8 +738,8 @@ void bfg_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface_t *surf)
 
     // core explosion - prevents firing it into the wall/floor
     if (other->takedamage)
-        T_Damage(other, self, self->owner, self->velocity, self->s.origin, plane->normal, 200, 0, 0, MOD_BFG_BLAST);
-    T_RadiusDamage(self, self->owner, 200, other, 100, MOD_BFG_BLAST);
+        T_Damage(other, self, self->owner, self->velocity, self->s.origin, plane->normal, scale_owner_damage(self, 200), 0, 0, MOD_BFG_BLAST);
+    T_RadiusDamage(self, self->owner, scale_owner_damage(self, 200), other, 100, MOD_BFG_BLAST);
 
     gi.sound(self, CHAN_VOICE, gi.soundindex("weapons/bfg__x1b.wav"), 1, ATTN_NORM, 0);
     self->solid = SOLID_NOT;
@@ -766,6 +775,7 @@ void bfg_think(edict_t *self)
         dmg = 5;
     else
         dmg = 10;
+    dmg = scale_owner_damage(self, dmg);
 
     ent = NULL;
     while ((ent = findradius(ent, self->s.origin, 256)) != NULL) {

@@ -18,7 +18,7 @@ def hasCustomReleaseSigning = releaseStoreFile.present &&
 
 android {
     namespace 'com.nvidia.q2rtx'
-    compileSdk 34
+    compileSdk 36
 
     signingConfigs {
         release {
@@ -40,7 +40,7 @@ android {
     defaultConfig {
         applicationId "com.nvidia.q2rtx"
         minSdk 34
-        targetSdk 34
+        targetSdk 36
         versionCode 1
         versionName "0.1.0"
 

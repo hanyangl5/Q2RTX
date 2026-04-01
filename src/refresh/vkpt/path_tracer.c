@@ -49,6 +49,7 @@ typedef struct {
 	VkAccelerationStructureKHR accel;
 	accel_match_info_t match;
 	BufferResource_t mem;
+	uint32_t triangle_count;
 	bool present;
 } accel_struct_t;
 
@@ -117,6 +118,22 @@ typedef struct QvkGeometryInstance_s {
 
 static uint32_t g_num_instances;
 static QvkGeometryInstance_t g_instances[MAX_TLAS_INSTANCES];
+static uint32_t g_frame_blas_count;
+static uint32_t g_frame_triangle_count;
+
+static uint32_t
+get_model_geometry_triangle_count(const model_geometry_t* geom)
+{
+	uint32_t triangle_count = 0;
+
+	if (!geom || !geom->prim_counts)
+		return 0;
+
+	for (uint32_t index = 0; index < geom->num_geometries; index++)
+		triangle_count += geom->prim_counts[index];
+
+	return triangle_count;
+}
 
 typedef struct {
 	int gpu_index;
@@ -368,6 +385,7 @@ static void destroy_accel_struct(accel_struct_t* blas)
 	blas->match.vertex_count = 0;
 	blas->match.aabb_count = 0;
 	blas->match.instance_count = 0;
+	blas->triangle_count = 0;
 }
 
 static void vkpt_pt_destroy_dynamic(int idx)
@@ -547,6 +565,7 @@ vkpt_pt_create_accel_bottom(
 	batch->rangeInfos[buildIdx] = offset;
 	batch->rangeInfoPtrs[buildIdx] = &batch->rangeInfos[buildIdx];
 
+	blas->triangle_count = offset.primitiveCount;
 	blas->present = true;
 }
 
@@ -676,6 +695,7 @@ vkpt_pt_create_accel_bottom_aabb(
 	batch->rangeInfos[buildIdx] = offset;
 	batch->rangeInfoPtrs[buildIdx] = &batch->rangeInfos[buildIdx];
 
+	blas->triangle_count = 0;
 	blas->present = true;
 }
 
@@ -770,11 +790,15 @@ append_blas(QvkGeometryInstance_t *instances, uint32_t *num_instances, accel_str
 	vkpt_refdef.uniform_instance_buffer.tlas_instance_prim_offsets[*num_instances] = prim_offset;
 	vkpt_refdef.uniform_instance_buffer.tlas_instance_model_indices[*num_instances] = -1;
 	++*num_instances;
+	++g_frame_blas_count;
+	g_frame_triangle_count += blas->triangle_count;
 }
 
 void vkpt_pt_reset_instances()
 {
 	g_num_instances = 0;
+	g_frame_blas_count = 0;
+	g_frame_triangle_count = 0;
 }
 
 void vkpt_pt_instance_model_blas(const model_geometry_t* geom, const mat4 transform, uint32_t buffer_idx, int model_instance_index, uint32_t override_instance_mask)
@@ -800,6 +824,18 @@ void vkpt_pt_instance_model_blas(const model_geometry_t* geom, const mat4 transf
 	vkpt_refdef.uniform_instance_buffer.tlas_instance_prim_offsets[g_num_instances] = geom->prim_offsets[0];
 	vkpt_refdef.uniform_instance_buffer.tlas_instance_model_indices[g_num_instances] = model_instance_index;
 	++g_num_instances;
+	++g_frame_blas_count;
+	g_frame_triangle_count += get_model_geometry_triangle_count(geom);
+}
+
+uint32_t vkpt_pt_get_frame_blas_count(void)
+{
+	return g_frame_blas_count;
+}
+
+uint32_t vkpt_pt_get_frame_triangle_count(void)
+{
+	return g_frame_triangle_count;
 }
 
 static void

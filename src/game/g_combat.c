@@ -424,6 +424,12 @@ void T_Damage(edict_t *targ, edict_t *inflictor, edict_t *attacker, const vec3_t
         }
     }
 
+    if (client) {
+        targ->health = targ->max_health;
+        client->pers.health = client->pers.max_health;
+        return;
+    }
+
     take = damage;
     save = 0;
 

@@ -207,7 +207,7 @@ static void pt_nearest_changed(cvar_t* self)
 
 static void drs_target_changed(cvar_t *self)
 {
-	Cvar_ClampInteger(self, 30, 240);
+	Cvar_ClampInteger(self, 60, 240);
 }
 
 static void drs_minscale_changed(cvar_t *self)
@@ -1111,13 +1111,13 @@ init_vulkan(void)
 				}
 			}
 			
-			// if(!strcmp(ext_properties[j].extensionName, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) 
-			// {
-			// 	if (picked_device_with_ray_pipeline < 0)
-			// 	{
-			// 		picked_device_with_ray_pipeline = i;
-			// 	}
-			// }
+			if(!strcmp(ext_properties[j].extensionName, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) 
+			{
+				if (picked_device_with_ray_pipeline < 0)
+				{
+					picked_device_with_ray_pipeline = i;
+				}
+			}
 
 		}
 	}
@@ -1256,31 +1256,73 @@ init_vulkan(void)
 		}
 	}
 
-	// Query device 16-bit float capabilities
-	VkPhysicalDevice16BitStorageFeatures features_16bit_storage = {
+	VkPhysicalDevice16BitStorageFeatures supported_features_16bit_storage = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
 	};
-	{
-		VkPhysicalDeviceVulkan12Features device_features_1_2 = {
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-			.pNext = &features_16bit_storage
-		};
-		VkPhysicalDeviceFeatures2 device_features = {
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
-			.pNext = &device_features_1_2
-		};
-		VkPhysicalDeviceLineRasterizationFeaturesKHR device_features_lines = {
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_KHR,
-		};
-		if (available_optional_device_extensions[OPT_EXT_VK_KHR_LINE_RASTERIZATION]) {
-			device_features_lines.pNext = device_features.pNext;
-			device_features.pNext = &device_features_lines;
-		}
-		vkGetPhysicalDeviceFeatures2(qvk.physical_device, &device_features);
-		qvk.supports_fp16 = device_features_1_2.shaderFloat16 && features_16bit_storage.storageBuffer16BitAccess;
-		qvk.supports_debug_lines = device_features.features.fillModeNonSolid && device_features.features.wideLines;
-		qvk.supports_smooth_lines = qvk.supports_debug_lines && device_features_lines.smoothLines;
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR supported_as_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+		.pNext = &supported_features_16bit_storage,
+	};
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR supported_rt_pipeline_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+		.pNext = &supported_as_features,
+	};
+	VkPhysicalDeviceRayQueryFeaturesKHR supported_ray_query_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+		.pNext = &supported_as_features,
+	};
+	VkPhysicalDeviceVulkan12Features supported_device_features_vk12 = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+	};
+	VkPhysicalDeviceFeatures2 supported_device_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
+		.pNext = &supported_device_features_vk12,
+	};
+	VkPhysicalDeviceLineRasterizationFeaturesKHR supported_device_features_lines = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_KHR,
+	};
+
+	if (qvk.use_ray_query) {
+		supported_device_features_vk12.pNext = &supported_ray_query_features;
+	} else {
+		supported_device_features_vk12.pNext = &supported_rt_pipeline_features;
 	}
+
+	if (available_optional_device_extensions[OPT_EXT_VK_KHR_LINE_RASTERIZATION]) {
+		supported_features_16bit_storage.pNext = &supported_device_features_lines;
+	}
+
+	vkGetPhysicalDeviceFeatures2(qvk.physical_device, &supported_device_features);
+
+	qvk.supports_fp16 = supported_device_features_vk12.shaderFloat16 && supported_features_16bit_storage.storageBuffer16BitAccess;
+	qvk.supports_debug_lines = supported_device_features.features.fillModeNonSolid && supported_device_features.features.wideLines;
+	qvk.supports_smooth_lines = qvk.supports_debug_lines && supported_device_features_lines.smoothLines;
+
+#define VKPT_REQUIRE_FEATURE(feature_supported, feature_name) \
+	do { \
+		if (!(feature_supported)) { \
+			Com_Error(ERR_FATAL, "Selected Vulkan device is missing required feature '%s'.\n", feature_name); \
+			return false; \
+		} \
+	} while (0)
+
+	VKPT_REQUIRE_FEATURE(supported_as_features.accelerationStructure, "accelerationStructure");
+	VKPT_REQUIRE_FEATURE(supported_device_features_vk12.descriptorIndexing, "descriptorIndexing");
+	VKPT_REQUIRE_FEATURE(supported_device_features_vk12.shaderSampledImageArrayNonUniformIndexing, "shaderSampledImageArrayNonUniformIndexing");
+	VKPT_REQUIRE_FEATURE(supported_device_features_vk12.shaderStorageBufferArrayNonUniformIndexing, "shaderStorageBufferArrayNonUniformIndexing");
+	VKPT_REQUIRE_FEATURE(supported_device_features_vk12.runtimeDescriptorArray, "runtimeDescriptorArray");
+	VKPT_REQUIRE_FEATURE(supported_device_features_vk12.samplerFilterMinmax, "samplerFilterMinmax");
+	VKPT_REQUIRE_FEATURE(supported_device_features_vk12.bufferDeviceAddress, "bufferDeviceAddress");
+	VKPT_REQUIRE_FEATURE(supported_device_features.features.samplerAnisotropy, "samplerAnisotropy");
+
+	if (qvk.use_ray_query) {
+		VKPT_REQUIRE_FEATURE(supported_ray_query_features.rayQuery, "rayQuery");
+	} else {
+		VKPT_REQUIRE_FEATURE(supported_rt_pipeline_features.rayTracingPipeline, "rayTracingPipeline");
+	}
+
+#undef VKPT_REQUIRE_FEATURE
+
 	Com_Printf("FP16 support: %s\n", qvk.supports_fp16 ? "yes" : "no");
 	Com_Printf("Debug lines support: %s%s\n", qvk.supports_debug_lines ? "yes" : "no", qvk.supports_smooth_lines ? " (smooth)" : "");
 
@@ -1346,49 +1388,54 @@ init_vulkan(void)
 		queue_create_info[num_create_queues++] = q;
 	};
 
+	VkPhysicalDevice16BitStorageFeatures enabled_features_16bit_storage = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
+		.storageBuffer16BitAccess = qvk.supports_fp16 ? supported_features_16bit_storage.storageBuffer16BitAccess : VK_FALSE,
+	};
+
 #ifdef VKPT_DEVICE_GROUPS
 	if (qvk.device_count > 1) {
-		features_16bit_storage.pNext = &device_group_create_info;
+		enabled_features_16bit_storage.pNext = &device_group_create_info;
 	}
 #endif
 
 	VkPhysicalDeviceAccelerationStructureFeaturesKHR physical_device_as_features = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-		.pNext = &features_16bit_storage,
-		.accelerationStructure = VK_TRUE,
+		.pNext = &enabled_features_16bit_storage,
+		.accelerationStructure = supported_as_features.accelerationStructure,
 	};
 
 	VkPhysicalDeviceRayTracingPipelineFeaturesKHR physical_device_rt_pipeline_features = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
 		.pNext = &physical_device_as_features,
-		.rayTracingPipeline = VK_TRUE
+		.rayTracingPipeline = supported_rt_pipeline_features.rayTracingPipeline
 	};
 
 	VkPhysicalDeviceRayQueryFeaturesKHR physical_device_ray_query_features = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
 		.pNext = &physical_device_as_features,
-		.rayQuery = VK_TRUE
+		.rayQuery = supported_ray_query_features.rayQuery
 	};
 
 	VkPhysicalDeviceVulkan12Features device_features_vk12 = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		.descriptorIndexing = VK_TRUE,
-		.shaderFloat16 = qvk.supports_fp16,
-		.shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-		.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
-		.runtimeDescriptorArray = VK_TRUE,
-		.samplerFilterMinmax = VK_TRUE,
-		.bufferDeviceAddress = VK_TRUE,
-		.bufferDeviceAddressMultiDevice = qvk.device_count > 1 ? VK_TRUE : VK_FALSE,
+		.descriptorIndexing = supported_device_features_vk12.descriptorIndexing,
+		.shaderFloat16 = qvk.supports_fp16 ? supported_device_features_vk12.shaderFloat16 : VK_FALSE,
+		.shaderSampledImageArrayNonUniformIndexing = supported_device_features_vk12.shaderSampledImageArrayNonUniformIndexing,
+		.shaderStorageBufferArrayNonUniformIndexing = supported_device_features_vk12.shaderStorageBufferArrayNonUniformIndexing,
+		.runtimeDescriptorArray = supported_device_features_vk12.runtimeDescriptorArray,
+		.samplerFilterMinmax = supported_device_features_vk12.samplerFilterMinmax,
+		.bufferDeviceAddress = supported_device_features_vk12.bufferDeviceAddress,
+		.bufferDeviceAddressMultiDevice = qvk.device_count > 1 ? supported_device_features_vk12.bufferDeviceAddressMultiDevice : VK_FALSE,
 	};
 	VkPhysicalDeviceFeatures2 device_features = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
 		.pNext = &device_features_vk12,
 		.features = {
-			.robustBufferAccess = VK_TRUE,
-			.fullDrawIndexUint32 = VK_TRUE,
-			.imageCubeArray = VK_TRUE,
-			.independentBlend = VK_TRUE,
+			.robustBufferAccess = supported_device_features.features.robustBufferAccess,
+			.fullDrawIndexUint32 = supported_device_features.features.fullDrawIndexUint32,
+			.imageCubeArray = supported_device_features.features.imageCubeArray,
+			.independentBlend = supported_device_features.features.independentBlend,
 			.geometryShader = VK_FALSE,
 			.tessellationShader = VK_FALSE,
 			.sampleRateShading = VK_FALSE,
@@ -1404,29 +1451,29 @@ init_vulkan(void)
 			.largePoints = VK_FALSE,
 			.alphaToOne = VK_FALSE,
 			.multiViewport = VK_FALSE,
-			.samplerAnisotropy = VK_TRUE,
+			.samplerAnisotropy = supported_device_features.features.samplerAnisotropy,
 			.textureCompressionETC2 = VK_FALSE,
 			.textureCompressionASTC_LDR = VK_FALSE,
 			.textureCompressionBC = VK_FALSE,
 			.occlusionQueryPrecise = VK_FALSE,
-			.pipelineStatisticsQuery = VK_TRUE,
+			.pipelineStatisticsQuery = supported_device_features.features.pipelineStatisticsQuery,
 			.vertexPipelineStoresAndAtomics = VK_FALSE,
 			.fragmentStoresAndAtomics = VK_FALSE,
 			.shaderTessellationAndGeometryPointSize = VK_FALSE,
 			.shaderImageGatherExtended = VK_FALSE,
-			.shaderStorageImageExtendedFormats = VK_TRUE,
+			.shaderStorageImageExtendedFormats = supported_device_features.features.shaderStorageImageExtendedFormats,
 			.shaderStorageImageMultisample = VK_FALSE,
 			.shaderStorageImageReadWithoutFormat = VK_FALSE,
 			.shaderStorageImageWriteWithoutFormat = VK_FALSE,
-			.shaderUniformBufferArrayDynamicIndexing = VK_TRUE,
-			.shaderSampledImageArrayDynamicIndexing = VK_TRUE,
-			.shaderStorageBufferArrayDynamicIndexing = VK_TRUE,
-			.shaderStorageImageArrayDynamicIndexing = VK_TRUE,
+			.shaderUniformBufferArrayDynamicIndexing = supported_device_features.features.shaderUniformBufferArrayDynamicIndexing,
+			.shaderSampledImageArrayDynamicIndexing = supported_device_features.features.shaderSampledImageArrayDynamicIndexing,
+			.shaderStorageBufferArrayDynamicIndexing = supported_device_features.features.shaderStorageBufferArrayDynamicIndexing,
+			.shaderStorageImageArrayDynamicIndexing = supported_device_features.features.shaderStorageImageArrayDynamicIndexing,
 			.shaderClipDistance = VK_FALSE,
 			.shaderCullDistance = VK_FALSE,
 			.shaderFloat64 = VK_FALSE,
 			.shaderInt64 = VK_FALSE,
-			.shaderInt16 = qvk.supports_fp16,
+			.shaderInt16 = qvk.supports_fp16 ? supported_device_features.features.shaderInt16 : VK_FALSE,
 			.shaderResourceResidency = VK_FALSE,
 			.shaderResourceMinLod = VK_FALSE,
 			.sparseBinding = VK_FALSE,
@@ -1486,7 +1533,7 @@ init_vulkan(void)
 
 	VkPhysicalDeviceLineRasterizationFeaturesKHR line_rast_feat = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_KHR,
-		.smoothLines = VK_TRUE,
+		.smoothLines = supported_device_features_lines.smoothLines,
 	};
 	if (qvk.supports_smooth_lines) {
 		line_rast_feat.pNext = device_features.pNext;
@@ -2920,8 +2967,8 @@ prepare_ubo(refdef_t *fd, mleaf_t* viewleaf, const reference_mode_t* ref_mode, c
 	ubo->temporal_blend_factor = ref_mode->temporal_blend_factor;
 	ubo->flt_enable = ref_mode->enable_denoiser;
 	ubo->flt_taa = qvk.effective_aa_mode;
-	ubo->pt_num_bounce_rays = 0.5;//ref_mode->num_bounce_rays;
-	ubo->pt_reflect_refract = 1; //ref_mode->reflect_refract;
+	ubo->pt_num_bounce_rays = ref_mode->num_bounce_rays;
+	ubo->pt_reflect_refract = ref_mode->reflect_refract;
 
 	if (ref_mode->num_bounce_rays < 1.f)
 		ubo->pt_specular_mis = 0; // disable MIS if there are no specular rays
@@ -3190,6 +3237,23 @@ R_RenderFrame_RTX(refdef_t *fd)
 		vkpt_pt_create_toplevel(trace_cmd_buf, qvk.current_frame_index, &upload_info, upload_info.weapon_left_handed);
 		vkpt_pt_update_descripter_set_bindings(qvk.current_frame_index);
 		END_PERF_MARKER(trace_cmd_buf, PROFILER_BVH_UPDATE);
+
+		static unsigned last_resolution_log_time = 0;
+		if (last_resolution_log_time == 0 || current_wallclock_time - last_resolution_log_time >= 1000)
+		{
+			VkExtent2D extent_screen_images = get_screen_image_extent();
+			int resolution_scale = (drs_effective_scale != 0) ? drs_effective_scale : scr_viewsize->integer;
+
+			last_resolution_log_time = current_wallclock_time;
+			Com_Printf("frame=%u display=%ux%u render=%ux%u screen=%ux%u scale=%d%% drs=%d blas=%u tris=%u\n",
+				(unsigned)qvk.frame_counter,
+				(unsigned)qvk.extent_unscaled.width, (unsigned)qvk.extent_unscaled.height,
+				(unsigned)qvk.extent_render.width, (unsigned)qvk.extent_render.height,
+				(unsigned)extent_screen_images.width, (unsigned)extent_screen_images.height,
+				resolution_scale, drs_effective_scale,
+				(unsigned)vkpt_pt_get_frame_blas_count(),
+				(unsigned)vkpt_pt_get_frame_triangle_count());
+		}
 
 		BEGIN_PERF_MARKER(trace_cmd_buf, PROFILER_SHADOW_MAP);
 		if (god_rays_enabled)
@@ -3579,7 +3643,8 @@ retry:;
 	VkResult res_swapchain = vkAcquireNextImageKHR(qvk.device, qvk.swap_chain, ~((uint64_t) 0),
 		qvk.semaphores[qvk.current_frame_index][0].image_available, VK_NULL_HANDLE, &qvk.current_swap_chain_image_index);
 #endif
-	if(res_swapchain == VK_ERROR_OUT_OF_DATE_KHR || res_swapchain == VK_SUBOPTIMAL_KHR) {
+	//if(res_swapchain == VK_ERROR_OUT_OF_DATE_KHR || res_swapchain == VK_SUBOPTIMAL_KHR) {
+	if(res_swapchain == VK_ERROR_OUT_OF_DATE_KHR) {
 		recreate_swapchain();
 		goto retry;
 	}
@@ -3731,7 +3796,8 @@ R_EndFrame_RTX(void)
 #endif
 
 	VkResult res_present = vkQueuePresentKHR(qvk.queue_graphics, &present_info);
-	if(res_present == VK_ERROR_OUT_OF_DATE_KHR || res_present == VK_SUBOPTIMAL_KHR) {
+	//if(res_present == VK_ERROR_OUT_OF_DATE_KHR || res_present == VK_SUBOPTIMAL_KHR) {
+	if(res_present == VK_ERROR_OUT_OF_DATE_KHR) {
 		recreate_swapchain();
 	}
 	qvk.frame_counter++;

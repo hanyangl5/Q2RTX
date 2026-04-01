@@ -220,11 +220,12 @@ static void fatal_shutdown(void)
 #ifndef __ANDROID__
     SDL_SetRelativeMouseMode(SDL_FALSE);
     SDL_ShowCursor(SDL_ENABLE);
-#endif
-#ifdef __ANDROID__
+#else
     Android_InputShutdown();
 #endif
+#ifndef __ANDROID__
     SDL_Quit();
+#endif
 }
 
 static char *get_clipboard_data(void)
